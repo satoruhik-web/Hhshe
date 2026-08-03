@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 import { Button, Input, Modal } from '../components/UI';
 import { Plus, Trash2, Edit2, ShieldCheck, Users, DollarSign, Package } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { CountrySelect } from '../components/CountrySelect';
 
 export function Admin() {
   const { user } = useAuth();
@@ -164,10 +164,6 @@ export function Admin() {
               <Plus className="w-5 h-5 mr-2" />
               Добавить товар
             </Button>
-            <Button variant="secondary" onClick={handleCheckValidity}>
-              <ShieldCheck className="w-5 h-5 mr-2" />
-              Проверить на невалид
-            </Button>
           </div>
 
           <div className="bg-glass border border-glass-border rounded-2xl backdrop-blur-xl overflow-hidden">
@@ -202,8 +198,15 @@ export function Admin() {
                         /> ₽
                       </td>
                       <td className="p-6 text-right space-x-2">
-                        <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => handleDeleteProduct(p.id)} className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors inline-block">
-                          <Trash2 className="w-5 h-5" />
+                        <motion.button 
+                          whileHover={{ scale: 1.1 }} 
+                          whileTap={{ scale: 0.9 }} 
+                          onClick={() => handleDeleteProduct(p.id)} 
+                          title="Пометить как невалид и удалить"
+                          className="p-2 text-red-400 bg-red-400/10 hover:bg-red-400/20 rounded-lg transition-colors inline-flex items-center gap-2"
+                        >
+                          <ShieldCheck className="w-4 h-4" />
+                          <span className="text-xs font-medium">Невалид</span>
                         </motion.button>
                       </td>
                     </motion.tr>
@@ -262,7 +265,10 @@ export function Admin() {
 
       <Modal isOpen={addModal} onClose={() => setAddModal(false)} title="Добавить товар">
         <div className="space-y-4">
-          <Input placeholder="Страна" value={newProduct.country} onChange={e => setNewProduct({...newProduct, country: e.target.value})} />
+          <CountrySelect 
+            value={newProduct.country} 
+            onChange={v => setNewProduct({...newProduct, country: v})} 
+          />
           <Input placeholder="Год регистрации" value={newProduct.registration} onChange={e => setNewProduct({...newProduct, registration: e.target.value})} />
           <div className="flex gap-4">
             <select className="flex-1 bg-black/20 border border-white/10 rounded-xl px-4 py-3 focus:border-brand-purple text-white" value={newProduct.twoFA} onChange={e => setNewProduct({...newProduct, twoFA: e.target.value})}>

@@ -9,7 +9,10 @@ export function TopUp() {
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<'USDT' | 'TON'>('USDT');
   const [modalOpen, setModalOpen] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'checking' | 'success'>('idle');
+  const [status, setStatus] = useState<'idle' | 'checking' | 'success' | 'error'>('idle');
+  const [invoiceId, setInvoiceId] = useState<number | null>(null);
+  const [payUrl, setPayUrl] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   // Fake exchange rates
   const rates = {
@@ -19,20 +22,14 @@ export function TopUp() {
 
   const calculatedAmount = amount ? (parseFloat(amount) / rates[currency]).toFixed(4) : '0.0000';
 
-  const handleTopup = () => {
+  const handleTopup = async () => {
     if (!amount || parseFloat(amount) <= 0) return;
-    setStatus('idle');
-    setModalOpen(true);
-  };
-
-  const checkPayment = async () => {
     setStatus('checking');
-    
-    // Simulate payment check delay
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    setModalOpen(true);
+    setErrorMessage('');
     
     try {
-      const res = await fetch('/api/topup', {
+      const res = await fetch('/api/topup/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: user?.id, amountRub: parseFloat(amount), currency })
@@ -40,14 +37,47 @@ export function TopUp() {
       const data = await res.json();
       
       if (data.success) {
-        updateBalance(data.balance);
-        setStatus('success');
-        setAmount('');
+        setInvoiceId(data.invoiceId);
+        setPayUrl(data.payUrl);
+        window.open(data.payUrl, '_blank');
+        startPolling(data.invoiceId);
+      } else {
+        setStatus('error');
+        setErrorMessage(data.message);
       }
     } catch (e) {
       console.error(e);
-      setStatus('idle');
+      setStatus('error');
+      setErrorMessage("Ошибка соединения");
     }
+  };
+
+  const startPolling = (invId: number) => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/topup/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invoiceId: invId, userId: user?.id, amountRub: parseFloat(amount), currency })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          clearInterval(interval);
+          if (!data.alreadyProcessed) updateBalance(data.balance);
+          setStatus('success');
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }, 5000);
+    
+    // Safety cleanup after 30 minutes
+    setTimeout(() => clearInterval(interval), 30 * 60 * 1000);
+  };
+
+  const checkPayment = () => {
+    if (invoiceId) startPolling(invoiceId);
   };
 
   return (
@@ -126,7 +156,27 @@ export function TopUp() {
           {status === 'checking' && (
             <motion.div key="checking" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center space-y-6 py-8">
               <div className="w-12 h-12 border-4 border-white/10 border-t-brand-purple rounded-full animate-spin mx-auto" />
-              <p className="text-white/70">Проверка поступления средств...</p>
+              <h3 className="text-xl font-medium">Ожидание оплаты</h3>
+              <p className="text-white/70">
+                Счет открыт в новой вкладке. Если окно не открылось, нажмите кнопку ниже:
+              </p>
+              {payUrl && (
+                <Button onClick={() => window.open(payUrl, '_blank')} className="w-full">
+                  Перейти к оплате
+                </Button>
+              )}
+              <p className="text-white/50 text-sm mt-4">Мы автоматически проверим поступление средств...</p>
+            </motion.div>
+          )}
+
+          {status === 'error' && (
+            <motion.div key="error" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="text-center space-y-6 py-4">
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto text-red-400">
+                <RefreshCw className="w-8 h-8" />
+              </div>
+              <p className="text-xl font-medium text-red-400">Ошибка</p>
+              <p className="text-white/70">{errorMessage}</p>
+              <Button onClick={() => setModalOpen(false)} className="w-full mt-4">Закрыть</Button>
             </motion.div>
           )}
 

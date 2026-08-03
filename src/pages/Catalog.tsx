@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
 import { Button, Modal } from '../components/UI';
+import { CountrySelect } from '../components/CountrySelect';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
 
 type Product = {
@@ -22,7 +23,7 @@ export function Catalog() {
   const [buyStatus, setBuyStatus] = useState<'idle' | 'checking' | 'processing' | 'success' | 'error'>('idle');
   const [buyError, setBuyError] = useState('');
 
-  const { user, updateBalance } = useAuth();
+  const [filterCountry, setFilterCountry] = useState('');
 
   useEffect(() => {
     fetchProducts();
@@ -85,23 +86,21 @@ export function Catalog() {
   return (
     <div className="w-full max-w-6xl mx-auto p-4 sm:p-6 space-y-6">
       
-      {/* Filters (visual only for mockup) */}
-      <div className="bg-glass border border-glass-border rounded-2xl p-6 backdrop-blur-xl flex flex-wrap gap-6 items-end">
+      {/* Filters */}
+      <div className="bg-glass border border-glass-border rounded-2xl p-6 backdrop-blur-xl flex flex-wrap gap-6 items-end z-10 relative">
         <div className="space-y-2 flex-1 min-w-[200px]">
           <label className="text-sm text-white/50">Цена</label>
           <div className="flex items-center gap-2">
-            <input type="text" placeholder="от" className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:border-brand-purple" />
+            <input type="number" placeholder="от" className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 h-[50px] focus:outline-none focus:border-brand-purple text-white transition-colors" />
             <span className="text-white/30">-</span>
-            <input type="text" placeholder="до" className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:border-brand-purple" />
+            <input type="number" placeholder="до" className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-3 h-[50px] focus:outline-none focus:border-brand-purple text-white transition-colors" />
           </div>
         </div>
         <div className="space-y-2 flex-1 min-w-[200px]">
           <label className="text-sm text-white/50">Страна</label>
-          <select className="w-full bg-black/20 border border-white/10 rounded-xl px-4 py-2 focus:outline-none focus:border-brand-purple appearance-none">
-            <option>Выберите страну</option>
-          </select>
+          <CountrySelect value={filterCountry} onChange={setFilterCountry} placeholder="Любая страна" />
         </div>
-        <Button className="w-full sm:w-auto px-8 py-2">Применить</Button>
+        <Button className="w-full sm:w-auto px-8 h-[50px]" onClick={() => fetchProducts()}>Применить</Button>
       </div>
 
       {/* Catalog Table */}
@@ -123,17 +122,17 @@ export function Catalog() {
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-white/50">Загрузка...</td>
                 </tr>
-              ) : products.length === 0 ? (
+              ) : products.filter(p => filterCountry ? p.country.includes(filterCountry) : true).length === 0 ? (
                 <tr>
                   <td colSpan={6} className="p-8 text-center text-white/50">Нет товаров в наличии</td>
                 </tr>
               ) : (
-                products.map((product) => (
+                products.filter(p => filterCountry ? p.country.includes(filterCountry) : true).map((product) => (
                   <motion.tr 
                     key={product.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    whileHover={{ scale: 1.01, backgroundColor: 'rgba(255,255,255,0.08)' }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    whileHover={{ scale: 1.02, backgroundColor: 'rgba(255,255,255,0.08)', zIndex: 10, position: 'relative' }}
                     transition={{ type: "spring", stiffness: 400, damping: 25 }}
                     className="border-b border-white/5 last:border-0 transition-colors"
                   >

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { LogOut, Eye, EyeOff } from 'lucide-react';
+import { LogOut, Eye, EyeOff, KeyRound } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { Button, Modal } from '../components/UI';
+import { Button, Modal, Input } from '../components/UI';
 import { motion } from 'motion/react';
 
 type Purchase = {
@@ -22,6 +22,11 @@ export function Profile() {
   const { user, logout } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [logoutModal, setLogoutModal] = useState(false);
+  const [passwordModal, setPasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
   
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [topups, setTopups] = useState<Topup[]>([]);
@@ -41,6 +46,34 @@ export function Profile() {
     }
   }, [user]);
 
+  const handleChangePassword = async () => {
+    setPasswordError('');
+    setPasswordSuccess(false);
+    if (!oldPassword || !newPassword) return setPasswordError("Заполните все поля");
+    
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id, oldPassword, newPassword })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPasswordSuccess(true);
+        setTimeout(() => {
+          setPasswordModal(false);
+          setOldPassword('');
+          setNewPassword('');
+          setPasswordSuccess(false);
+        }, 1500);
+      } else {
+        setPasswordError(data.message);
+      }
+    } catch(e) {
+      setPasswordError("Ошибка сервера");
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -52,13 +85,18 @@ export function Profile() {
           <div className="absolute top-0 right-0 w-32 h-32 bg-brand-purple/20 blur-[50px]" />
           <h2 className="text-xl font-medium mb-6">Информация</h2>
           
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div>
               <p className="text-white/50 text-sm mb-1">Логин</p>
               <p className="font-medium text-lg">{user.username}</p>
             </div>
             <div>
-              <p className="text-white/50 text-sm mb-1">Пароль</p>
+              <div className="flex justify-between items-center mb-1">
+                <p className="text-white/50 text-sm">Пароль</p>
+                <button onClick={() => setPasswordModal(true)} className="text-brand-purple text-xs hover:underline flex items-center gap-1">
+                  <KeyRound className="w-3 h-3" /> Сменить
+                </button>
+              </div>
               <div className="flex items-center gap-3">
                 <p className="font-medium text-lg font-mono">
                   {showPassword ? '••••••••' : '********'}
@@ -143,6 +181,18 @@ export function Profile() {
             <Button variant="secondary" onClick={() => setLogoutModal(false)} className="flex-1">Отмена</Button>
             <Button variant="danger" onClick={logout} className="flex-1">Выйти</Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={passwordModal} onClose={() => setPasswordModal(false)} title="Смена пароля">
+        <div className="space-y-4">
+          <Input type="password" placeholder="Старый пароль" value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
+          <Input type="password" placeholder="Новый пароль" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+          
+          {passwordError && <p className="text-red-400 text-sm text-center">{passwordError}</p>}
+          {passwordSuccess && <p className="text-green-400 text-sm text-center">Пароль успешно изменен!</p>}
+          
+          <Button className="w-full mt-2" onClick={handleChangePassword}>Обновить пароль</Button>
         </div>
       </Modal>
 
