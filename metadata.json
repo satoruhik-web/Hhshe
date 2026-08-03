@@ -1,0 +1,6 @@
+{
+  "name": "Telzo",
+  "description": "Современный магазин по продаже Telegram-аккаунтов с пополнением через Crypto bot",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
