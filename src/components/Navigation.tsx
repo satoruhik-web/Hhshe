@@ -18,7 +18,7 @@ export function Navigation() {
   }
 
   return (
-    <nav className="flex justify-center p-6 w-full max-w-4xl mx-auto">
+    <nav className="flex justify-center p-4 w-full max-w-3xl mx-auto">
       <div className="flex bg-glass border border-glass-border rounded-2xl p-2 backdrop-blur-xl gap-2 w-full sm:w-auto shadow-[0_0_40px_rgba(122,27,242,0.1)]">
         {links.map((link) => (
           <NavLink
@@ -31,7 +31,7 @@ export function Navigation() {
                 whileTap={{ scale: 0.95 }}
                 transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 className={cn(
-                  "flex items-center gap-3 px-6 py-3 rounded-xl transition-all duration-300",
+                  "flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300",
                   "hover:bg-white/5",
                   isActive 
                     ? "bg-white/10 text-white shadow-[0_0_20px_rgba(122,27,242,0.2)] border border-white/10" 

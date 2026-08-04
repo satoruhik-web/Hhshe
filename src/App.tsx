@@ -1,59 +1,79 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useSearchParams, useLocation } from 'react-router-dom';
+import { Toaster, toast } from 'sonner';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { Navigation } from './components/Navigation';
-import { Auth } from './pages/Auth';
-import { Catalog } from './pages/Catalog';
-import { Profile } from './pages/Profile';
-import { TopUp } from './pages/TopUp';
-import { Admin } from './pages/Admin';
+import { LanguageProvider } from './context/LanguageContext';
+import { Layout } from './components/Layout';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/auth" />;
-  return <>{children}</>;
+// Shop Pages
+import { Catalog } from './pages/Catalog';
+import { TopUp } from './pages/TopUp';
+import { Profile } from './pages/Profile';
+import { Admin } from './pages/Admin';
+import { Auth } from './pages/Auth';
+
+function TopupHandler({ children }: { children: React.ReactNode }) {
+    const [searchParams, setSearchParams] = useSearchParams();
+    const topupToken = searchParams.get('topup_token');
+    const { user, updateBalance } = useAuth();
+    
+    useEffect(() => {
+        if (topupToken && user) {
+            fetch('/api/topup/claim', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: topupToken, phone: user.phone })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    toast.success('Баланс успешно пополнен!');
+                    updateBalance(data.balance);
+                } else {
+                    toast.success(data.message);
+                }
+                searchParams.delete('topup_token');
+                setSearchParams(searchParams);
+            });
+        }
+    }, [topupToken, user]);
+    
+    return <>{children}</>;
 }
 
-function AppRoutes() {
-  const { user } = useAuth();
-
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="*" element={<Auth />} />
-      </Routes>
-    );
-  }
-
-  return (
-    <div className="min-h-screen pb-20">
-      <div className="pt-6 pb-2">
-        <Navigation />
-      </div>
-      <main className="pt-4">
-        <Routes>
-          <Route path="/" element={<Catalog />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/topup" element={<TopUp />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </main>
-    </div>
-  );
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+    const { user, isInitialized } = useAuth();
+    const location = useLocation();
+    
+    if (!isInitialized) return null; // or a loading spinner
+    
+    if (!user) {
+        return <Navigate to="/auth" state={{ from: location }} replace />;
+    }
+    
+    return <>{children}</>;
 }
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-      </Router>
-    </AuthProvider>
+    <BrowserRouter>
+      <Toaster theme="dark" position="top-center" />
+      <AuthProvider>
+        <LanguageProvider>
+        <TopupHandler>
+          <Routes>
+            {/* Shop Routes */}
+            <Route path="/" element={<ProtectedRoute><Layout><Catalog /></Layout></ProtectedRoute>} />
+            <Route path="/topup" element={<ProtectedRoute><Layout><TopUp /></Layout></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><Layout><Profile /></Layout></ProtectedRoute>} />
+            <Route path="/admin" element={<ProtectedRoute><Layout><Admin /></Layout></ProtectedRoute>} />
+            <Route path="/auth" element={<Auth />} />
+                      
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </TopupHandler>
+      </LanguageProvider>
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
-

@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 

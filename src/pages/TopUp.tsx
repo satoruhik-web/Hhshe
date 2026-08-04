@@ -1,11 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 import { Button, Modal, Input } from '../components/UI';
-import { CheckCircle2, Wallet, RefreshCw } from 'lucide-react';
+import { CheckCircle2, Wallet, RefreshCw, Key } from 'lucide-react';
 
 export function TopUp() {
   const { user, updateBalance } = useAuth();
+  const [tab, setTab] = useState<'crypto' | 'code'>('crypto');
+  
+  // Crypto
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<'USDT' | 'TON'>('USDT');
   const [modalOpen, setModalOpen] = useState(false);
@@ -13,6 +17,12 @@ export function TopUp() {
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [payUrl, setPayUrl] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  
+  // Code
+  const [topupCode, setTopupCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeError, setCodeError] = useState('');
+  const [codeSuccess, setCodeSuccess] = useState('');
 
   // Fake exchange rates
   const rates = {
@@ -79,6 +89,32 @@ export function TopUp() {
   const checkPayment = () => {
     if (invoiceId) startPolling(invoiceId);
   };
+  
+  const handleClaimCode = async () => {
+      if (!topupCode.trim()) return;
+      setCodeLoading(true);
+      setCodeError('');
+      setCodeSuccess('');
+      try {
+          const res = await fetch('/api/topup/claim', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: topupCode.trim(), userId: user?.id })
+          });
+          const data = await res.json();
+          if (data.success) {
+              updateBalance(data.balance);
+              setCodeSuccess('Баланс успешно пополнен!');
+              setTopupCode('');
+          } else {
+              setCodeError(data.message);
+          }
+      } catch (e) {
+          setCodeError('Ошибка соединения');
+      } finally {
+          setCodeLoading(false);
+      }
+  };
 
   return (
     <div className="w-full max-w-xl mx-auto p-4 sm:p-6">
@@ -91,11 +127,28 @@ export function TopUp() {
           </div>
           <div>
             <h2 className="text-xl font-medium">Пополнить баланс</h2>
-            <p className="text-white/50 text-sm">через Crypto Bot</p>
+            <p className="text-white/50 text-sm">выберите способ пополнения</p>
           </div>
         </div>
 
-        <div className="space-y-6">
+        <div className="flex gap-2 mb-6 p-1 bg-black/20 rounded-xl">
+            <button 
+                onClick={() => setTab('crypto')}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'crypto' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
+            >
+                Crypto Bot
+            </button>
+            <button 
+                onClick={() => setTab('code')}
+                className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors ${tab === 'code' ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white'}`}
+            >
+                По коду
+            </button>
+        </div>
+
+        <AnimatePresence mode="wait">
+        {tab === 'crypto' ? (
+        <motion.div key="crypto" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
           <div className="space-y-2">
             <label className="text-sm text-white/70">Сумма пополнения (₽)</label>
             <Input 
@@ -133,7 +186,46 @@ export function TopUp() {
           <Button onClick={handleTopup} className="w-full py-4 text-lg mt-4" disabled={!amount || parseFloat(amount) <= 0}>
             Оплатить через Crypto Bot
           </Button>
-        </div>
+        </motion.div>
+        ) : (
+        <motion.div key="code" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="space-y-6">
+            <div className="space-y-2">
+                <label className="text-sm text-white/70">Секретный код пополнения</label>
+                <div className="relative">
+                    <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-white/40" />
+                    <Input 
+                        type="text" 
+                        placeholder="Введите код" 
+                        value={topupCode}
+                        onChange={(e) => setTopupCode(e.target.value)}
+                        className="pl-12"
+                    />
+                </div>
+            </div>
+            
+            <AnimatePresence>
+                {codeError && (
+                    <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="text-red-400 text-sm">
+                        {codeError}
+                    </motion.p>
+                )}
+                {codeSuccess && (
+                    <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="text-green-400 text-sm">
+                        {codeSuccess}
+                    </motion.p>
+                )}
+            </AnimatePresence>
+
+            <Button onClick={handleClaimCode} loading={codeLoading} className="w-full py-4 text-lg mt-4" disabled={!topupCode.trim()}>
+                Активировать код
+            </Button>
+            
+            <p className="text-white/40 text-xs text-center mt-4">
+                Убедитесь, что вы привязали свой номер телефона в Telegram боте, так как коды пополнения привязываются к вашему аккаунту.
+            </p>
+        </motion.div>
+        )}
+        </AnimatePresence>
       </motion.div>
 
       <Modal isOpen={modalOpen} onClose={() => { if(status !== 'checking') setModalOpen(false) }}>

@@ -1,0 +1,531 @@
+import { Telegraf, Markup, session, Context } from 'telegraf';
+import fs from 'fs';
+import path from 'path';
+
+// Types
+interface User {
+  id: number;
+  username?: string;
+  first_name?: string;
+  balance: number;
+  lastBonus: number;
+  isBlocked: boolean;
+}
+
+interface Promo {
+  code: string;
+  tokens: number;
+  maxUses: number;
+  uses: number;
+  expiry: number | null;
+  isActive: boolean;
+  usedBy: number[];
+}
+
+interface Settings {
+  dailyBonus: number;
+  adminIds: number[];
+  minesCount: number;
+  multipliers: Record<number, number>;
+}
+
+interface Game {
+  userId: number;
+  bet: number;
+  field: boolean[]; 
+  opened: number[];
+  status: 'active' | 'won' | 'lost';
+  messageId?: number;
+}
+
+interface BotDB {
+  users: Record<number, User>;
+  promos: Record<string, Promo>;
+  settings: Settings;
+  activeGames: Record<number, Game>;
+  history: any[];
+}
+
+interface SessionData {
+  state?: string;
+  tempData?: any;
+}
+
+interface MyContext extends Context {
+  session?: SessionData;
+}
+
+// Multipliers for 5x4 (20 cells)
+const defaultMultipliers: Record<number, number> = {
+  1: 1.15, 2: 1.35, 3: 1.60, 4: 1.90, 5: 2.30,
+  6: 2.80, 7: 3.50, 8: 4.40, 9: 5.60, 10: 7.20,
+  11: 9.50, 12: 13.00, 13: 18.00, 14: 26.00, 15: 40.00,
+  16: 65.00, 17: 110.00, 18: 200.00, 19: 400.00
+};
+
+// Premium Photos
+// DB Setup
+const DB_PATH = path.join(process.cwd(), 'bot_db.json');
+export let db: BotDB = {
+  users: {},
+  promos: {},
+  settings: {
+    dailyBonus: 1500,
+    adminIds: [],
+    minesCount: 8,
+    multipliers: defaultMultipliers
+  },
+  activeGames: {},
+  history: []
+};
+
+function loadDB() {
+  if (fs.existsSync(DB_PATH)) {
+    try {
+      const data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
+      db = { ...db, ...data };
+      if (!db.settings.multipliers) db.settings.multipliers = defaultMultipliers;
+    } catch (e) {
+      console.error('Error loading bot_db.json', e);
+    }
+  } else {
+    saveDB();
+  }
+}
+
+export function saveDB() {
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+}
+
+loadDB();
+
+const BOT_TOKEN = '8827470879:AAHcxyzmtC8U3KcruiTLnXi-BeFteU9nJQ8';
+const bot = new Telegraf<MyContext>(BOT_TOKEN);
+
+bot.use(session());
+
+bot.use(async (ctx, next) => {
+  if (ctx.from) {
+    const id = ctx.from.id;
+    if (!db.users[id]) {
+      db.users[id] = {
+        id,
+        username: ctx.from.username,
+        first_name: ctx.from.first_name,
+        balance: 1000, // Initial gift for testing
+        lastBonus: 0,
+        isBlocked: false
+      };
+      
+      // Auto-assign first user as admin if none exists
+      if (db.settings.adminIds.length === 0) {
+          db.settings.adminIds.push(id);
+      }
+      saveDB();
+    } else {
+      db.users[id].username = ctx.from.username;
+      db.users[id].first_name = ctx.from.first_name;
+    }
+
+    if (db.users[id].isBlocked) return;
+  }
+  
+  if (ctx.session === undefined) ctx.session = {};
+  await next();
+});
+
+const getMainMenu = (isAdmin: boolean) => {
+    const kb: any[] = [
+        [Markup.button.webApp('🔥 Открыть Mini App 🔥', process.env.PUBLIC_URL || 'https://ais-pre-mcvy6r2iwtln3q756flga7-260474887662.europe-west3.run.app')],
+        ['👤 Профиль', '🎁 Ежедневный бонус'],
+        ['🎟️ Промокод']
+    ];
+    if (isAdmin) kb.push(['👑 Админ-панель']);
+    return Markup.keyboard(kb).resize();
+};
+
+bot.start((ctx) => {
+  ctx.session = {}; 
+  const isAdmin = db.settings.adminIds.includes(ctx.from.id);
+  ctx.reply('💎 <b>Добро пожаловать в Premium Casino!</b>\n\nИспытай удачу в Mines, крути Колесо Фортуны в нашем новом Mini App и забирай огромные выигрыши!\n\n<i>Для игры в Mines добавьте бота в свою группу и напишите в чат: "токен 500"</i>', { parse_mode: 'HTML', ...getMainMenu(isAdmin) });
+});
+
+bot.hears('👤 Профиль', (ctx) => {
+  const user = db.users[ctx.from.id];
+  ctx.reply(`👤 <b>Твой Профиль</b>\n\nID: <code>${user.id}</code>\nИмя: <b>${user.first_name}</b>\nБаланс: <b>${user.balance}</b> 💎`, { parse_mode: 'HTML' });
+}, { parse_mode: 'HTML' });
+
+bot.hears('🎁 Ежедневный бонус', (ctx) => {
+  const user = db.users[ctx.from.id];
+  const now = Date.now();
+  const DAY = 24 * 60 * 60 * 1000;
+  
+  if (now - user.lastBonus >= DAY) {
+    user.balance += db.settings.dailyBonus;
+    user.lastBonus = now;
+    saveDB();
+    ctx.reply(`🎁 Вы получили ежедневный бонус: <b>${db.settings.dailyBonus}</b> 💎!\nВаш баланс: ${user.balance} 💎`, { parse_mode: 'HTML' });
+  } else {
+    const left = DAY - (now - user.lastBonus);
+    const hours = Math.floor(left / (1000 * 60 * 60));
+    const minutes = Math.floor((left % (1000 * 60 * 60)) / (1000 * 60));
+    ctx.reply(`⏳ Следующий бонус будет доступен через ${hours}ч ${minutes}м.`);
+  }
+});
+
+bot.hears('🎟️ Промокод', (ctx) => {
+  if (ctx.session) ctx.session.state = 'wait_promo_code';
+  ctx.reply('Введите промокод:', Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'cancel_state')]]));
+});
+
+
+
+// Fast Game Shortcut: "токен 1000"
+bot.hears(/^(?:токен|token|ставка|bet)\s+(\d+)$/i, async (ctx) => {
+    if (ctx.chat.type === 'private') {
+        return ctx.reply('❌ Играть можно только в групповых чатах! Добавьте бота в свою группу.');
+    }
+
+    const bet = parseInt(ctx.match[1]);
+    const userId = ctx.from.id;
+    const user = db.users[userId];
+
+    if (db.activeGames[userId]?.status === 'active') {
+        return ctx.reply('У вас уже есть активная игра! Завершите её.', { reply_parameters: { message_id: ctx.message.message_id } });
+    }
+    if (bet < 100) return ctx.reply('❌ Минимум 100 токенов.', { reply_parameters: { message_id: ctx.message.message_id } });
+    if (!user || user.balance < bet) return ctx.reply('❌ Недостаточно токенов на балансе.', { reply_parameters: { message_id: ctx.message.message_id } });
+
+    user.balance -= bet;
+    const field = generateMinesField(20, db.settings.minesCount);
+    db.activeGames[userId] = { userId, bet, field, opened: [], status: 'active' };
+    saveDB();
+    
+    await ctx.reply(`🎮 <b>Mines 5x4</b>\nСтавка: <b>${bet}</b> 💎\nМин: <b>${db.settings.minesCount}</b> 💣`, { parse_mode: 'HTML',
+        reply_parameters: { message_id: ctx.message.message_id },
+        ...renderMinesKeyboard(db.activeGames[userId])
+    });
+});
+
+// Admin Panel
+bot.hears('👑 Админ-панель', (ctx) => {
+  if (!db.settings.adminIds.includes(ctx.from.id)) return;
+  ctx.session = {}; 
+  
+  const adminKeyboard = Markup.inlineKeyboard([
+    [Markup.button.callback('💰 Выдать токены', 'admin_give'), Markup.button.callback('💸 Списать токены', 'admin_take')],
+    [Markup.button.callback('🎟️ Создать промо', 'admin_create_promo'), Markup.button.callback('📋 Список промо', 'admin_list_promo')],
+    [Markup.button.callback('👥 Пользователь (ID)', 'admin_user_info'), Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+    [Markup.button.callback('➕ Добавить админа', 'admin_add'), Markup.button.callback('➖ Удалить админа', 'admin_remove')]
+  ]);
+  
+  ctx.reply('👑 <b>VIP Админ-панель</b>\nПолный контроль над системой.', { parse_mode: 'HTML', ...adminKeyboard });
+});
+
+bot.action('cancel_state', (ctx) => { ctx.answerCbQuery().catch(()=>{});
+  ctx.session = {};
+  ctx.editMessageText('Действие отменено.');
+});
+
+bot.action('resume_game', (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const game = db.activeGames[ctx.from!.id];
+    if (game && game.status === 'active') {
+        ctx.editMessageText(`🎮 Игра Mines\nСтавка: ${game.bet}`, renderMinesKeyboard(game));
+    } else {
+        ctx.editMessageText('Активной игры не найдено.');
+    }
+});
+
+bot.on('text', async (ctx, next) => {
+  const state = ctx.session?.state;
+  const text = ctx.message.text;
+  const userId = ctx.from.id;
+  const user = db.users[userId];
+
+  if (!state) return next();
+
+  if (state === 'wait_promo_code') {
+    const promo = db.promos[text.trim()];
+    if (!promo || !promo.isActive || (promo.expiry && Date.now() > promo.expiry) || (promo.uses >= promo.maxUses && promo.maxUses !== 0) || promo.usedBy.includes(userId)) {
+      ctx.reply('❌ Промокод недействителен или уже использован.');
+    } else {
+      user.balance += promo.tokens;
+      promo.uses += 1;
+      promo.usedBy.push(userId);
+      saveDB();
+      ctx.reply(`✅ Вы активировали промокод и получили <b>${promo.tokens}</b> 💎!`, { parse_mode: 'HTML' });
+    }
+    ctx.session = {}; return;
+  }
+
+  if (state === 'wait_bet') {
+    const bet = parseInt(text);
+    if (isNaN(bet) || bet < 100) return ctx.reply('❌ Минимум 100 токенов.');
+    if (user.balance < bet) return ctx.reply('❌ Недостаточно токенов.');
+
+    user.balance -= bet;
+    const field = generateMinesField(20, db.settings.minesCount); // 5x4 = 20
+    db.activeGames[userId] = { userId, bet, field, opened: [], status: 'active' };
+    saveDB();
+    ctx.session = {};
+    
+    const msg = await ctx.reply(`🎮 <b>Mines 5x4</b>\nСтавка: ${bet} 💎\nМин: ${db.settings.minesCount} 💣`, {
+        parse_mode: 'HTML',
+        ...renderMinesKeyboard(db.activeGames[userId])
+    });
+    db.activeGames[userId].messageId = msg.message_id;
+    saveDB();
+    return;
+  }
+
+  // Admin States
+  if (!db.settings.adminIds.includes(userId)) return next();
+
+  if (state === 'admin_add_id') {
+      const id = parseInt(text);
+      if (!isNaN(id) && !db.settings.adminIds.includes(id)) {
+          db.settings.adminIds.push(id);
+          saveDB();
+      }
+      ctx.reply(`✅ ID ${id} назначен администратором.`);
+      ctx.session = {}; return;
+  }
+
+  if (state === 'admin_remove_id') {
+      const id = parseInt(text);
+      db.settings.adminIds = db.settings.adminIds.filter(x => x !== id);
+      saveDB();
+      ctx.reply(`✅ ID ${id} удален из администраторов.`);
+      ctx.session = {}; return;
+  }
+
+  if (state === 'admin_give_id' || state === 'admin_take_id' || state === 'admin_user_info_id') {
+      const targetId = parseInt(text);
+      if (isNaN(targetId) || !db.users[targetId]) return ctx.reply('Пользователь не найден.');
+      if (state === 'admin_user_info_id') {
+          const target = db.users[targetId];
+          ctx.reply(`👤 <b>Пользователь</b>\nID: ${target.id}\nИмя: ${target.first_name}\nБаланс: ${target.balance}\nБан: ${target.isBlocked ? 'Да' : 'Нет'}`, {
+              parse_mode: 'HTML',
+              ...Markup.inlineKeyboard([[Markup.button.callback(target.isBlocked ? '🔓 Разблокировать' : '🚫 Заблокировать', `toggle_block_${target.id}`)]])
+          });
+          ctx.session = {};
+      } else {
+          ctx.session.tempData = { targetId };
+          ctx.session.state = state === 'admin_give_id' ? 'admin_give_amount' : 'admin_take_amount';
+          ctx.reply('Введите сумму:');
+      }
+      return;
+  }
+
+  if (state === 'admin_give_amount' || state === 'admin_take_amount') {
+      const amount = parseInt(text);
+      const target = db.users[ctx.session?.tempData?.targetId];
+      if (state === 'admin_give_amount') {
+          target.balance += amount;
+          ctx.reply(`✅ Выдано ${amount} 💎.`);
+      } else {
+          target.balance = Math.max(0, target.balance - amount);
+          ctx.reply(`✅ Списано ${amount} 💎.`);
+      }
+      saveDB();
+      ctx.session = {}; return;
+  }
+  
+  if (state === 'admin_broadcast') {
+      let count = 0;
+      for (const id in db.users) {
+          try {
+              await bot.telegram.sendMessage(id, `📢 <b>Рассылка</b>\n\n${text}`, { parse_mode: 'HTML' });
+              count++;
+          } catch(e) {}
+      }
+      ctx.reply(`✅ Рассылка доставлена: ${count} пользователям.`);
+      ctx.session = {}; return;
+  }
+
+  // Quick promo setup for brevity...
+  if (state === 'admin_promo_name') {
+      const parts = text.trim().split(' ');
+      const codeName = parts[0];
+      const tokensAmount = parts[1] ? parseInt(parts[1]) : 1000;
+      
+      db.promos[codeName] = { code: codeName, tokens: isNaN(tokensAmount) ? 1000 : tokensAmount, maxUses: 0, uses: 0, expiry: null, isActive: true, usedBy: [] };
+      saveDB();
+      ctx.reply(`✅ Промокод ${codeName} на ${isNaN(tokensAmount) ? 1000 : tokensAmount} 💎 создан!`);
+      ctx.session = {}; return;
+  }
+
+  next();
+});
+
+// Admin Callbacks
+bot.action('admin_give', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_give_id'; ctx.editMessageText('Введите ID пользователя:'); });
+bot.action('admin_take', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_take_id'; ctx.editMessageText('Введите ID пользователя:'); });
+bot.action('admin_user_info', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_user_info_id'; ctx.editMessageText('Введите ID пользователя:'); });
+bot.action('admin_broadcast', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_broadcast'; ctx.editMessageText('Введите текст рассылки:'); });
+bot.action('admin_create_promo', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_promo_name'; ctx.editMessageText('Введите название промокода и сумму через пробел (например: PROMO2024 500):'); });
+bot.action('admin_list_promo', (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const codes = Object.keys(db.promos);
+    if (codes.length === 0) return ctx.editMessageText('Нет активных промокодов.', Markup.inlineKeyboard([[Markup.button.callback('Назад', 'admin_back')]]));
+    
+    let text = '🎟️ <b>Промокоды</b>\n\n';
+    const kb = [];
+    for (const code of codes) {
+        const p = db.promos[code];
+        text += `<code>${p.code}</code> - ${p.tokens} ток. (${p.uses}/${p.maxUses || '∞'})\n`;
+        kb.push([Markup.button.callback(`Удалить ${p.code}`, `del_promo_${p.code}`)]);
+    }
+    kb.push([Markup.button.callback('Назад', 'admin_back')]);
+    ctx.editMessageText(text, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kb) });
+});
+bot.action('admin_back', (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const adminKeyboard = Markup.inlineKeyboard([
+      [Markup.button.callback('💰 Выдать токены', 'admin_give'), Markup.button.callback('💸 Списать токены', 'admin_take')],
+      [Markup.button.callback('🎟️ Создать промо', 'admin_create_promo'), Markup.button.callback('📋 Список промо', 'admin_list_promo')],
+      [Markup.button.callback('👥 Пользователь (ID)', 'admin_user_info'), Markup.button.callback('📢 Рассылка', 'admin_broadcast')],
+      [Markup.button.callback('➕ Добавить админа', 'admin_add'), Markup.button.callback('➖ Удалить админа', 'admin_remove')]
+    ]);
+    ctx.editMessageText('👑 <b>VIP Админ-панель</b>\nПолный контроль над системой.', { parse_mode: 'HTML', ...adminKeyboard });
+});
+bot.action(/^del_promo_(.+)$/, (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const code = ctx.match[1];
+    delete db.promos[code];
+    saveDB();
+    ctx.answerCbQuery('Промокод удален');
+    const codes = Object.keys(db.promos);
+    if (codes.length === 0) return ctx.editMessageText('Нет активных промокодов.', Markup.inlineKeyboard([[Markup.button.callback('Назад', 'admin_back')]]));
+    let text = '🎟️ <b>Промокоды</b>\n\n';
+    const kb = [];
+    for (const c of codes) {
+        const p = db.promos[c];
+        text += `<code>${p.code}</code> - ${p.tokens} ток. (${p.uses}/${p.maxUses || '∞'})\n`;
+        kb.push([Markup.button.callback(`Удалить ${p.code}`, `del_promo_${p.code}`)]);
+    }
+    kb.push([Markup.button.callback('Назад', 'admin_back')]);
+    ctx.editMessageText(text, { parse_mode: 'HTML', ...Markup.inlineKeyboard(kb) });
+});
+bot.action('admin_add', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_add_id'; ctx.editMessageText('Введите ID будущего админа:'); });
+bot.action('admin_remove', (ctx) => { ctx.answerCbQuery().catch(()=>{}); ctx.session!.state = 'admin_remove_id'; ctx.editMessageText('Введите ID админа для снятия:'); });
+
+bot.action(/^toggle_block_(\d+)$/, (ctx) => {
+    const targetId = parseInt(ctx.match[1]);
+    if (db.users[targetId]) {
+        db.users[targetId].isBlocked = !db.users[targetId].isBlocked;
+        saveDB();
+        ctx.answerCbQuery(db.users[targetId].isBlocked ? 'Заблокирован' : 'Разблокирован');
+    }
+});
+
+
+// 5x4 Mines Logic (20 total)
+function generateMinesField(total: number, mines: number): boolean[] {
+    const field = Array(total).fill(false);
+    let placed = 0;
+    while (placed < mines) {
+        const idx = Math.floor(Math.random() * total);
+        if (!field[idx]) { field[idx] = true; placed++; }
+    }
+    return field;
+}
+
+function renderMinesKeyboard(game: Game) {
+    const keyboard = [];
+    let row = [];
+    for (let i = 0; i < 20; i++) { // 20 cells
+        if (game.status === 'active') {
+            if (game.opened.includes(i)) row.push(Markup.button.callback('💎', `ignore`));
+            else row.push(Markup.button.callback('🟩', `mine_${i}`));
+        } else {
+            if (game.field[i]) row.push(Markup.button.callback(game.opened.includes(i) ? '💥' : '💣', 'ignore'));
+            else row.push(Markup.button.callback(game.opened.includes(i) ? '💎' : '🟩', 'ignore'));
+        }
+        if (row.length === 5) { keyboard.push(row); row = []; }
+    }
+    
+    if (game.status === 'active' && game.opened.length > 0) {
+        const nextMult = db.settings.multipliers[game.opened.length] || 1;
+        const currentWin = Math.floor(game.bet * nextMult);
+        keyboard.push([Markup.button.callback(`💰 Забрать ${currentWin} 💎 💰`, 'cashout')]);
+    } else if (game.status !== 'active') {
+        keyboard.push([Markup.button.callback(`🔄 Сыграть еще раз`, 'play_again')]);
+    }
+    
+    return Markup.inlineKeyboard(keyboard);
+}
+
+bot.action('ignore', (ctx) => ctx.answerCbQuery());
+
+bot.action(/^mine_(\d+)$/, async (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const userId = ctx.from.id;
+    const game = db.activeGames[userId];
+    if (!game || game.status !== 'active') return ctx.answerCbQuery('Игра окончена', { show_alert: true });
+    
+    const idx = parseInt(ctx.match[1]);
+    if (game.opened.includes(idx)) return ctx.answerCbQuery();
+    game.opened.push(idx);
+    
+    if (game.field[idx]) {
+        game.status = 'lost';
+        db.history.push({ userId, bet: game.bet, win: 0, date: Date.now() });
+        saveDB();
+        await ctx.editMessageText(`💥 <b>БУМ!</b> Вы попали на мину!\nСтавка ${game.bet} 💎 проиграна.`, {
+            parse_mode: 'HTML', ...renderMinesKeyboard(game)
+        });
+    } else {
+        const openedCount = game.opened.length;
+        const totalSafe = 20 - db.settings.minesCount;
+        
+        if (openedCount === totalSafe) {
+            game.status = 'won';
+            const mult = db.settings.multipliers[openedCount] || 1;
+            const win = Math.floor(game.bet * mult);
+            db.users[userId].balance += win;
+            db.history.push({ userId, bet: game.bet, win, date: Date.now() });
+            saveDB();
+            await ctx.editMessageText(`🎉 <b>ИДЕАЛЬНАЯ ПОБЕДА!</b>\nВыигрыш: ${win} 💎!`, {
+                parse_mode: 'HTML', ...renderMinesKeyboard(game)
+            });
+        } else {
+            const currentMult = db.settings.multipliers[openedCount] || 1;
+            const currentWin = Math.floor(game.bet * currentMult);
+            saveDB();
+            try {
+                await ctx.editMessageText(`🎮 <b>Mines 5x4</b>\nСтавка: ${game.bet} 💎\nОткрыто: ${openedCount}\nТекущий выигрыш: <b>${currentWin} 💎</b>`, {
+                    parse_mode: 'HTML', ...renderMinesKeyboard(game)
+                });
+            } catch(e) {}
+        }
+    }
+});
+
+bot.action('cashout', async (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    const userId = ctx.from.id;
+    const game = db.activeGames[userId];
+    if (!game || game.status !== 'active') return ctx.answerCbQuery();
+    
+    const openedCount = game.opened.length;
+    if (openedCount === 0) return ctx.answerCbQuery();
+    
+    const currentMult = db.settings.multipliers[openedCount] || 1;
+    const win = Math.floor(game.bet * currentMult);
+    game.status = 'won';
+    db.users[userId].balance += win;
+    db.history.push({ userId, bet: game.bet, win, date: Date.now() });
+    saveDB();
+    
+    await ctx.editMessageText(`💰 <b>Вы успешно забрали выигрыш!</b>\nСумма: +${win} 💎.`, {
+        parse_mode: 'HTML', ...renderMinesKeyboard(game)
+    });
+});
+
+bot.action('play_again', (ctx) => { ctx.answerCbQuery().catch(()=>{});
+    if (ctx.session) ctx.session.state = 'wait_bet';
+    ctx.editMessageText(`🎮 <b>Mines 5x4</b>\n\nВведите сумму ставки (мин. 100 💎):`, Markup.inlineKeyboard([[Markup.button.callback('Отмена', 'cancel_state')]]));
+});
+
+export function startTelegramBot() {
+    bot.launch({ dropPendingUpdates: true }).catch(err => console.error('Telegram bot launch error:', err));
+    console.log('Telegram bot is starting...');
+    process.once('SIGINT', () => bot.stop('SIGINT'));
+    process.once('SIGTERM', () => bot.stop('SIGTERM'));
+}

@@ -1,0 +1,149 @@
+{
+  "users": {
+    "8018220528": {
+      "id": 8018220528,
+      "username": "bloodonmysleeve",
+      "first_name": "Salontgen",
+      "balance": 150,
+      "lastBonus": 0,
+      "isBlocked": false,
+      "isAdmin": false,
+      "phone": "+12175804611"
+    },
+    "1785835319640": {
+      "id": 1785835319640,
+      "username": "admin",
+      "password": "19863238r",
+      "balance": 0,
+      "lastBonus": 0,
+      "isBlocked": true,
+      "isAdmin": false,
+      "banReason": "Иди нахуй ",
+      "bannedUntil": 1785924568903
+    },
+    "1785836103117": {
+      "id": 1785836103117,
+      "username": "Roman",
+      "first_name": "Roman",
+      "password": "Romka2012",
+      "balance": 0,
+      "lastBonus": 0,
+      "isBlocked": false,
+      "isAdmin": true
+    },
+    "1785836124364": {
+      "id": 1785836124364,
+      "username": "Rostislav",
+      "first_name": "Rostislav",
+      "password": "19863238r",
+      "balance": 0,
+      "lastBonus": 0,
+      "isBlocked": false,
+      "isAdmin": true
+    }
+  },
+  "promos": {},
+  "settings": {
+    "dailyBonus": 1500,
+    "adminIds": [
+      1785836103117,
+      1785836124364
+    ],
+    "minesCount": 8,
+    "multipliers": {
+      "1": 1.15,
+      "2": 1.35,
+      "3": 1.6,
+      "4": 1.9,
+      "5": 2.3,
+      "6": 2.8,
+      "7": 3.5,
+      "8": 4.4,
+      "9": 5.6,
+      "10": 7.2,
+      "11": 9.5,
+      "12": 13,
+      "13": 18,
+      "14": 26,
+      "15": 40,
+      "16": 65,
+      "17": 110,
+      "18": 200,
+      "19": 400
+    }
+  },
+  "tokens": {
+    "4e33d51dc8c39c8e40a2c2f569c68118": {
+      "type": "reg",
+      "userId": 8018220528,
+      "phone": "12175804611",
+      "used": false,
+      "date": 1785835017388
+    },
+    "4bd4f633bdc044916eb832a951f44497": {
+      "type": "reg",
+      "userId": 8018220528,
+      "phone": "12175804611",
+      "used": false,
+      "date": 1785835212933
+    },
+    "f86ocdlwhhs": {
+      "type": "phone_code",
+      "userId": 8018220528,
+      "code": "75227",
+      "expiresAt": 1785837596416,
+      "used": true
+    },
+    "TELZO-LQJQAN-CSXK": {
+      "type": "topup",
+      "amount": 50,
+      "used": true
+    },
+    "TELZO-92321M-8M90": {
+      "type": "topup",
+      "amount": 300,
+      "used": true
+    }
+  },
+  "history": [
+    {
+      "id": 1785841963163,
+      "userId": 8018220528,
+      "productId": 1785841922297,
+      "type": "buy",
+      "amount": 200,
+      "date": 1785841963163
+    }
+  ],
+  "withdrawals": [],
+  "topups": [],
+  "tg_sessions": {
+    "12175804611": {
+      "phone_code_hash": "518d1ddc81d395030c",
+      "session_string": "1AZWarzQBu1hGY_lOkVLBzJlbQm2GIbds2dKl0IU4WnVTtRtzaLb0t-xj2TRM2M2Vnjh_rwJ3guLpUZiI6oTe-DkAQDNpcdCTUwENmc4LNxWLgie0ARmiKpzhkyVTWo_784P9RYnk0yRNQNg1BhTp9abQqM554oIQZkMbM1S8eSD02IjmKAzD4ZTNuXz4MsKJXjeW8XMa9cSPqJIYYbj1_vuY8FmwuQIq36_xP3V8sSDOz8_oD_TwgoYeH6BqE0xdA1iXYTI074ENE-FfEEO3r98Y1wSJiGeD_Ng1RdYq9iiA7XQEFYPoqU1dL6_DvsxSAZYt3A__CUOJdd6W8O2Ye6iKAZETYRM="
+    },
+    "917385533016": {
+      "phone_code_hash": "72833cf7439d70a236",
+      "session_string": "1BVtsOJgBu6aeWd3F3s9cdPnnVPbYq67h9W6vCAIG1Xdnnk_jfjBl3_WkAYKG3E7pN_DftqurHPVWJzKvLSw8ptb4lwnq6zQNkNIQl9IHL2nmF46i2uz7rCgIPvp6zmtq2TGSRPHHHHkfOWM2ADcuYNT-CZsBlkPx0IR8Bqn7file1Fk2Cn89poClB_V3JQ2jFPIiKQxaN8OCL6-c04TvuFVnssCiMYFdQS7c_JfSnpoTU2fMeGTpXTIAmXuyzeEUId4s324sKJVaP939AlOJ50ts3-slUMxFTvbiG6E4CqMZoCPgIFNATZyLzFwmcXpEkIvBPV0RPAlBKAMQWJ78-bA4z0uY70w="
+    }
+  },
+  "products": {
+    "1785841922297": {
+      "id": 1785841922297,
+      "status": "sold",
+      "addedDate": 1785841922297,
+      "country": "Индия",
+      "registration": "Фиш",
+      "twoFA": "Да",
+      "spamBlock": "Нет",
+      "price": 200,
+      "hasBotSession": false,
+      "phone": "917385533016",
+      "cloudPassword": "Romka2012",
+      "idDigits": 9,
+      "tgSessionString": "1BVtsOJgBu6aeWd3F3s9cdPnnVPbYq67h9W6vCAIG1Xdnnk_jfjBl3_WkAYKG3E7pN_DftqurHPVWJzKvLSw8ptb4lwnq6zQNkNIQl9IHL2nmF46i2uz7rCgIPvp6zmtq2TGSRPHHHHkfOWM2ADcuYNT-CZsBlkPx0IR8Bqn7file1Fk2Cn89poClB_V3JQ2jFPIiKQxaN8OCL6-c04TvuFVnssCiMYFdQS7c_JfSnpoTU2fMeGTpXTIAmXuyzeEUId4s324sKJVaP939AlOJ50ts3-slUMxFTvbiG6E4CqMZoCPgIFNATZyLzFwmcXpEkIvBPV0RPAlBKAMQWJ78-bA4z0uY70w=",
+      "buyerId": 8018220528
+    }
+  },
+  "activeGames": {}
+}

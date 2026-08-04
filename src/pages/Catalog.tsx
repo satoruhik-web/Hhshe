@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../context/AuthContext';
+import { toast } from 'sonner';
 import { Button, Modal } from '../components/UI';
 import { CountrySelect } from '../components/CountrySelect';
 import { CheckCircle2, AlertCircle } from 'lucide-react';
@@ -12,6 +13,9 @@ type Product = {
   twoFA: string;
   spamBlock: string;
   price: number;
+  idDigits?: number;
+  addedDate?: number;
+  hasBotSession?: boolean;
 };
 
 export function Catalog() {
@@ -23,6 +27,7 @@ export function Catalog() {
   const [buyStatus, setBuyStatus] = useState<'idle' | 'checking' | 'processing' | 'success' | 'error'>('idle');
   const [buyError, setBuyError] = useState('');
 
+  const { user, updateBalance } = useAuth();
   const [filterCountry, setFilterCountry] = useState('');
 
   useEffect(() => {
@@ -157,14 +162,53 @@ export function Catalog() {
         <AnimatePresence mode="wait">
           {buyStatus === 'idle' && (
             <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-center space-y-6">
+              
               <h3 className="text-xl font-medium">Подтверждение</h3>
-              <p className="text-white/70">
-                Вы действительно хотите купить данный аккаунт за <span className="font-semibold text-brand-purple">{selectedProduct?.price.toFixed(2)} ₽</span>?
-              </p>
-              <div className="flex gap-4 justify-center">
-                <Button variant="secondary" onClick={() => setBuyModalOpen(false)} className="flex-1">Отмена</Button>
-                <Button onClick={confirmBuy} className="flex-1">Купить</Button>
+              <div className="bg-black/20 rounded-xl p-4 text-left space-y-2 text-sm border border-white/5">
+                 <p><span className="text-white/50">ID:</span> {selectedProduct?.idDigits || 9} цифр</p>
+                 <p><span className="text-white/50">Зарегистрирован:</span> {selectedProduct?.registration || 'Неизвестно'}</p>
+                 <p><span className="text-white/50">Выставлен:</span> {selectedProduct?.addedDate ? new Date(selectedProduct.addedDate).toLocaleDateString() : 'Неизвестно'}</p>
+                 <p><span className="text-white/50">Сессия бота:</span> {selectedProduct?.hasBotSession ? 'Есть' : 'Нет'}</p>
               </div>
+              <p className="text-white/70 pt-2">
+                Цена аккаунта: <span className="font-semibold text-brand-purple">{selectedProduct?.price.toFixed(2)} ₽</span>
+              </p>
+              
+              <div className="flex flex-col gap-3 justify-center pt-2">
+                <Button 
+                    variant="secondary" 
+                    className="w-full bg-brand-purple/10 text-brand-purple hover:bg-brand-purple/20 border border-brand-purple/20"
+                    onClick={async () => {
+                        setBuyStatus('checking');
+                        try {
+                            const res = await fetch('/api/product/check-validity', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ productId: selectedProduct?.id })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                                toast.success('Аккаунт валиден!');
+                                setBuyStatus('idle');
+                            } else {
+                                setBuyError(data.message);
+                                setBuyStatus('error');
+                                fetchProducts(); // refresh catalog to hide it
+                            }
+                        } catch(e) {
+                            setBuyError('Ошибка при проверке');
+                            setBuyStatus('error');
+                        }
+                    }}
+                >
+                    Проверить на валидность
+                </Button>
+                <div className="flex gap-4 mt-2">
+                    <Button variant="secondary" onClick={() => setBuyModalOpen(false)} className="flex-1">Отмена</Button>
+                    <Button onClick={confirmBuy} className="flex-1">Купить</Button>
+                </div>
+              </div>
+
             </motion.div>
           )}
 
